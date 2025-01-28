@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use super::error::HttpError;
 use super::routes::DataType;
 use super::routes::Req;
@@ -13,7 +11,7 @@ use http_body_util::combinators::BoxBody;
 use http_body_util::BodyExt;
 use http_body_util::Empty;
 use hyper::HeaderMap;
-
+use std::sync::Arc;
 pub struct HttpServer {
     routes: Vec<Route>,
     options: Options,

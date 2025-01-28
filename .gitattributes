@@ -11,5 +11,6 @@ generated/* linguist-generated=true
 
 
 docker/* linguist-vendored=true
-
+docker/reports/*.html linguist-generated=true
+docker/reports/*.json linguist-generated=true
 LICENSE* linguist-documentation

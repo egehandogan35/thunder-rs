@@ -1,4 +1,3 @@
-// server/ws/room.rs
 use serde::Serialize;
 use serde_json::to_vec;
 use std::collections::HashMap;
@@ -27,7 +26,7 @@ impl Socket {
         let rooms = rooms.lock().await;
         rooms.contains_key(room_id)
     }
-    /// Gets all connection IDs in a room, optionally excluding one connection 
+    /// Gets all connection IDs in a room, optionally excluding one connection
     pub async fn connections_vec(
         &self,
         rooms: &Arc<Mutex<HashMap<String, Room>>>,

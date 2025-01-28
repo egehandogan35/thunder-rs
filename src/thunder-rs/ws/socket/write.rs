@@ -1,5 +1,3 @@
-// server/ws/write.rs
-
 use super::socket::Socket;
 use crate::ws::error::SendError;
 use crate::ws::frame::send_frame_inner;

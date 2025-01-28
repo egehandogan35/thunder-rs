@@ -304,4 +304,8 @@ This project is licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT) or ht
 - Tokio for async runtime
 - Autobahn Test Suite for WebSocket compliance testing
 
+## In Production
+
+- [CineParty](https://chromewebstore.google.com/detail/cineparty/kegfmeohbfiighjhlinekdodjiibpikg?hl=tr) - Chrome extension for synchronized video watching with friends.
+
 

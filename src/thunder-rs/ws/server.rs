@@ -1,5 +1,3 @@
-// server/ws/server.rs
-
 use hyper::body::Bytes;
 use std::collections::HashMap;
 use std::sync::Arc;

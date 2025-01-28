@@ -13,6 +13,9 @@ async fn main() {
     let websocket_server: &mut WebSocketServer = server.websocket_server();
     websocket_server.on_connect(move |socket: Arc<Socket>| {
         let socket_clone = Arc::clone(&socket);
+        //Can be used for autobahn test
+        //Dont need to send back the message when ping, it is automatically handled by the library
+        //It might be changed in the future
         tokio::spawn(async move {
             loop {
                 let message = match socket.read().await {

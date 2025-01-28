@@ -306,6 +306,6 @@ This project is licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT) or ht
 
 ## In Production
 
-- [CineParty](https://chromewebstore.google.com/detail/cineparty/kegfmeohbfiighjhlinekdodjiibpikg?hl=tr) - Chrome extension for synchronized video watching with friends.
+- [CineParty](https://chromewebstore.google.com/detail/cineparty/kegfmeohbfiighjhlinekdodjiibpikg?hl=tr) - Chrome extension for synchronized video watching with friends. Actively used by 1,700+ users weekly.
 
 

@@ -1,0 +1,10 @@
+
+FROM crossbario/autobahn-testsuite
+
+
+RUN mkdir -p /config /app/reports
+
+COPY fuzzingclient.json /config/fuzzingclient.json
+
+
+CMD ["wstest", "--mode", "fuzzingclient", "--spec", "/config/fuzzingclient.json"]

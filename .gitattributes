@@ -1,0 +1,15 @@
+
+*.rs linguist-language=Rust
+*.toml linguist-language=Rust
+
+
+*.md linguist-documentation
+README.md linguist-documentation
+
+
+generated/* linguist-generated=true
+
+
+docker/* linguist-vendored=true
+
+LICENSE* linguist-documentation

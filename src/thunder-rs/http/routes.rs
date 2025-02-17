@@ -131,7 +131,7 @@ impl DataType for String {
         content_header: Option<ContentHeader>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         match content_header {
-            Some(ContentHeader::TextPlain) | None => Ok(self.clone()),
+            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => Ok(self.clone()),
             _ => Err("Unsupported content type for String".into()),
         }
     }
@@ -141,11 +141,10 @@ impl DataType for String {
         content_header: Option<ContentHeader>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         match content_header {
-            Some(ContentHeader::TextPlain) | None => Ok(data.to_string()),
+            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => Ok(data.to_string()),
             _ => Err("Unsupported content type for deserialization".into()),
         }
     }
-
     fn from_content_json(
         data: &Value,
         content_header: Option<ContentHeader>,
@@ -154,11 +153,11 @@ impl DataType for String {
         Self: Sized,
     {
         match content_header {
-            Some(ContentHeader::TextPlain) | None => {
+            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => {
                 if let Some(string) = data.as_str() {
                     Ok(string.to_string())
                 } else {
-                    Err("Expected data to be a string".into())
+                    Ok(data.to_string())
                 }
             }
             _ => Err("Unsupported content type for deserialization".into()),

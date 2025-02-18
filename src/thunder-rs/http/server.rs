@@ -94,7 +94,7 @@ where
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Res> + Send + 'static>>,
     D: DataType + Send + Sync + 'static + Clone,
 {
-    let headers = req.headers;
+    let headers = req.get_headers().clone();
 
     let length = headers.get("content-length");
     let request_size = match length {

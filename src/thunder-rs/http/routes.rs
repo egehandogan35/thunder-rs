@@ -335,9 +335,9 @@ where
 }
 
 impl HttpServer {
-    ///Checks if the request is valid and returns the appropriate response based on the route and method
-    /// ! This is not for validating the request body or checking every detail of the request,
-    /// ! it is for checking if the request and method is valid and if the route exists
+    /// Checks if the request is valid and returns the appropriate response based on the route and method
+    /// !This is not for validating the request body or checking every detail of the request,
+    /// !It is for checking if the request and method is valid and if the route exists
     pub async fn handle_http(
         &self,
         req: Request<BoxBody<Bytes, hyper::Error>>,
@@ -765,23 +765,23 @@ impl HttpServer {
     }
 
     fn create_middleware_req(req: Req, path: String, data: Vec<u8>) -> Req {
-        let headers = req.get_headers();
+        let headers = req.get_headers().clone();
         Req {
             req: req.req,
             path,
             data: Some(Box::new(data)),
-            headers,
+            headers: headers.clone(),
             params: req.params,
         }
     }
     /// Builds a route with the given builder and middleware
-    /// ! This is the main function that builds the route and adds it to the server
+    /// !This is the main function that builds the route and adds it to the server
     fn add_route<F, D>(
         &mut self,
         route_builder: RouteBuilder<F, D>,
         middleware: Option<Arc<dyn Middleware + Send + Sync>>,
     ) where
-        //Data is transmitted as seperate from the request just to make it easier to handle
+        // Data is transmitted as seperate from the request just to make it easier to handle
         F: Fn(Req, D, hyper::HeaderMap) -> BoxFuture<'static, Res> + Send + Sync + 'static,
         D: DataType + Send + Sync,
     {
@@ -793,7 +793,7 @@ impl HttpServer {
             method: route_builder.method,
             path: route_builder.path,
             handler: Arc::new(move |req| {
-                let path = req.get_path();
+                let path = req.get_path().to_string();
                 //empty data
                 let data = Vec::new();
 
@@ -1148,22 +1148,23 @@ impl Default for NextWrapper {
 }
 #[derive(Default, Debug)]
 pub struct Req {
-    pub req: Request<BoxBody<Bytes, HttpError>>,
-    pub path: String,
+    pub(crate) req: Request<BoxBody<Bytes, HttpError>>,
+    path: String,
     data: Option<Box<dyn std::any::Any + Send>>,
-    pub headers: HeaderMap,
-    pub params: Params,
+    headers: HeaderMap,
+    params: Params,
 }
 
 impl Req {
     pub fn debug_body(&self) {
         println!("{:?}", self.req.body());
     }
-    pub fn get_headers(&self) -> HeaderMap {
-        self.req.headers().clone()
+    pub fn get_headers(&self) -> &HeaderMap {
+        &self.headers
     }
-    pub fn get_path(&self) -> String {
-        self.req.uri().path().to_string()
+
+    pub fn get_path(&self) -> &str {
+        &self.path
     }
 
     /// Gets data from the request body or middleware data

@@ -116,10 +116,7 @@ where
         let body = http_body_util::Full::new(Bytes::from(error_message.to_string())).boxed();
         let mut response = Response::new(body);
         *response.status_mut() = StatusCode::PAYLOAD_TOO_LARGE;
-        return Res {
-            res: Ok(response),
-            headers: HeaderMap::new(),
-        };
+        return Res::new(Ok(response), HeaderMap::new());
     }
 
     let body = http_body_util::BodyStream::new(req.req.into_body());
@@ -137,10 +134,7 @@ where
         Err(_e) => {
             let mut not_found = Response::new(empty());
             *not_found.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-            Res {
-                res: Err(HttpError::new("Internal Server Error")),
-                headers: HeaderMap::new(),
-            }
+            Res::new(Err(HttpError::new("Internal Server Error")), HeaderMap::new())
         }
     }
 }

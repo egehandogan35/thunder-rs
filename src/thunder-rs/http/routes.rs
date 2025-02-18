@@ -1,5 +1,3 @@
-use crate::server::parser::parse_query_params;
-
 use super::error::HttpError;
 use super::httpmethod::HttpMethod;
 use super::server::{boxbody_to_bytes, empty, process_body, HttpServer};
@@ -364,10 +362,29 @@ impl HttpServer {
             *response.status_mut() = StatusCode::OK;
             return Ok(response);
         }
+        let req_params = req.uri().query();
         let mut params = Params::new();
 
-        if req.uri().query().is_some() {
-            params.query_params = parse_query_params(req.uri().path_and_query().unwrap().as_str());
+        if let Some(query_str) = req_params {
+            query_str
+                .split('&')
+                .filter_map(|pair| {
+                    let mut parts = pair.split('=');
+                    if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                        let decoded_key = urlencoding::decode(key).ok()?.to_string();
+                        let decoded_value = urlencoding::decode(value).ok()?.to_string();
+                        Some((decoded_key, decoded_value))
+                    } else {
+                        None
+                    }
+                })
+                .for_each(|(key, value)| {
+                    params
+                        .query_params
+                        .entry(key)
+                        .or_insert_with(Vec::new)
+                        .push(value);
+                });
         }
 
         let trimmed_req_path = req_path.trim_end_matches('/').to_string();

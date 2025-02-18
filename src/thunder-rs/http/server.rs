@@ -1,5 +1,6 @@
 use super::error::HttpError;
 use super::routes::DataType;
+use super::routes::Params;
 use super::routes::Req;
 use super::routes::Res;
 use crate::http::routes::Route;
@@ -75,10 +76,19 @@ pub fn empty() -> BoxBody<Bytes, hyper::Error> {
 /// Process the request body and call the handler
 /// Size is the max size of the request body
 /// Size can be set by the user *Default is 32000*
-pub async fn process_body<F, D>(req: Req, handler: Arc<F>, data: D, size: usize) -> Res
+pub async fn process_body<F, D>(
+    req: Req,
+    path: String,
+    params: Params,
+    handler: Arc<F>,
+    data: D,
+    size: usize,
+) -> Res
 where
     F: Fn(
         http_body_util::Collected<Bytes>,
+        String,
+        Params,
         D,
         hyper::HeaderMap,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Res> + Send + 'static>>,
@@ -111,6 +121,7 @@ where
             headers: HeaderMap::new(),
         };
     }
+
     let body = http_body_util::BodyStream::new(req.req.into_body());
     let body_vec = body.collect().await;
     match body_vec {
@@ -120,8 +131,7 @@ where
             if let Some(content_type) = headers.get(hyper::header::CONTENT_TYPE) {
                 handler_headers.insert(hyper::header::CONTENT_TYPE, content_type.clone());
             }
-
-            let res = handler(body_vec, data, handler_headers).await;
+            let res = handler(body_vec, path, params, data, handler_headers).await;
             res
         }
         Err(_e) => {

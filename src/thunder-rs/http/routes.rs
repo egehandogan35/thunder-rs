@@ -2,7 +2,6 @@ use super::error::HttpError;
 use super::httpmethod::HttpMethod;
 use super::server::{boxbody_to_bytes, empty, process_body, HttpServer};
 use super::HandlerResult;
-use crate::server::parser::parse_query_params;
 use http_body_util::Collected;
 use http_body_util::{combinators::BoxBody, BodyExt};
 use hyper::body::Bytes;
@@ -131,7 +130,9 @@ impl DataType for String {
         content_header: Option<ContentHeader>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         match content_header {
-            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => Ok(self.clone()),
+            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => {
+                Ok(self.clone())
+            }
             _ => Err("Unsupported content type for String".into()),
         }
     }
@@ -141,7 +142,9 @@ impl DataType for String {
         content_header: Option<ContentHeader>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         match content_header {
-            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => Ok(data.to_string()),
+            Some(ContentHeader::TextPlain) | Some(ContentHeader::ApplicationJson) | None => {
+                Ok(data.to_string())
+            }
             _ => Err("Unsupported content type for deserialization".into()),
         }
     }
@@ -359,6 +362,30 @@ impl HttpServer {
             *response.status_mut() = StatusCode::OK;
             return Ok(response);
         }
+        let req_params = req.uri().query();
+        let mut params = Params::new();
+
+        if let Some(query_str) = req_params {
+            query_str
+                .split('&')
+                .filter_map(|pair| {
+                    let mut parts = pair.split('=');
+                    if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                        let decoded_key = urlencoding::decode(key).ok()?.to_string();
+                        let decoded_value = urlencoding::decode(value).ok()?.to_string();
+                        Some((decoded_key, decoded_value))
+                    } else {
+                        None
+                    }
+                })
+                .for_each(|(key, value)| {
+                    params
+                        .query_params
+                        .entry(key)
+                        .or_insert_with(Vec::new)
+                        .push(value);
+                });
+        }
 
         let trimmed_req_path = req_path.trim_end_matches('/').to_string();
         let mut method_not_allowed = false;
@@ -367,31 +394,75 @@ impl HttpServer {
         for route in self.get_routes() {
             let route_method = route.method.clone();
             let route_path = route.path.trim_end_matches('/');
-            //Right now this is just checking if the path is the same or if the path starts with /static
+            // Right now this is just checking if the path is the same or if the path starts with /static
             // In the future this will be expanded to support more complex path matching
-            let paths_match = trimmed_req_path == route_path
-                || (trimmed_req_path.starts_with("/static")
-                    && route_path.starts_with("/static")
-                    && (route_path == "/static" || route_path.starts_with("/static/")));
+            let static_match = trimmed_req_path.starts_with("/static")
+                && route_path.starts_with("/static")
+                && (route_path == "/static" || route_path.starts_with("/static/"));
 
-            if paths_match {
+            if static_match {
                 if req_method == route_method {
                     matched_route = Some(route);
                     method_not_allowed = false;
                     break;
                 } else {
                     method_not_allowed = true;
+                    continue;
+                }
+            }
+
+            let route_segments: Vec<&str> =
+                route_path.split('/').filter(|s| !s.is_empty()).collect();
+            let path_segments: Vec<&str> = trimmed_req_path
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if route_segments.len() == path_segments.len() {
+                let mut matches = true;
+
+                for (route_seg, path_seg) in route_segments.iter().zip(path_segments.iter()) {
+                    if !route_seg.starts_with(':') && route_seg != path_seg {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if matches {
+                    if req_method == route_method {
+                        matched_route = Some(route);
+                        method_not_allowed = false;
+                        break;
+                    } else {
+                        method_not_allowed = true;
+                    }
                 }
             }
         }
         let req_headers = req.headers().clone();
 
         if let Some(route) = matched_route {
+            let route_segments: Vec<&str> =
+                route.path.split('/').filter(|s| !s.is_empty()).collect();
+            let path_segments: Vec<&str> = trimmed_req_path
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            for (pattern, actual) in route_segments.iter().zip(path_segments.iter()) {
+                if pattern.starts_with(':') {
+                    let param_name = pattern.trim_start_matches(':');
+                    params
+                        .path_params
+                        .insert(param_name.to_string(), actual.to_string());
+                }
+            }
             let req_obj = Req {
                 req,
                 path: trimmed_req_path.to_string(),
                 data: None,
                 headers: req_headers,
+                params,
             };
 
             let res = (route.handler)(req_obj).await;
@@ -511,23 +582,23 @@ impl HttpServer {
     fn create_handler<F, Fut, D>(
         handler: F,
         content_header: Option<ContentHeader>,
-    ) -> impl Fn(Collected<Bytes>, D, HeaderMap) -> BoxFuture<'static, Res>
+    ) -> impl Fn(Collected<Bytes>, String, Params, D, HeaderMap) -> BoxFuture<'static, Res>
     where
         F: Fn(Req, HeaderMap) -> Fut + Send + Sync + 'static + Clone,
         Fut: Future<Output = (Result<D, HttpError>, HeaderMap)> + Send,
         D: DataType + Send + Sync + 'static + Clone,
     {
         let handler = Arc::new(handler);
-        move |collected, mid_data, headers| {
+        move |collected, path, params, mid_data, headers| {
             let handler_clone = Arc::clone(&handler);
             Box::pin(async move {
                 let data = collected.to_bytes();
-
                 let middleware_request = Req {
                     req: Request::new(Self::create_boxbody_bytes(data)),
-                    path: String::new(),
+                    path,
                     data: Some(Box::new(mid_data)),
                     headers: headers.clone(),
+                    params,
                 };
                 let (result, modified_headers) = handler_clone(middleware_request, headers).await;
 
@@ -700,6 +771,7 @@ impl HttpServer {
             path,
             data: Some(Box::new(data)),
             headers,
+            params: req.params,
         }
     }
     /// Builds a route with the given builder and middleware
@@ -763,7 +835,10 @@ impl HttpServer {
         middleware: M,
         content_header: Option<ContentHeader>,
     ) where
-        F: Fn(Collected<Bytes>, D, HeaderMap) -> BoxFuture<'static, Res> + Send + Sync + 'static,
+        F: Fn(Collected<Bytes>, String, Params, D, HeaderMap) -> BoxFuture<'static, Res>
+            + Send
+            + Sync
+            + 'static,
         M: Middleware + Send + Sync + 'static,
         D: DataType + Send + Sync + 'static + Clone,
     {
@@ -774,7 +849,9 @@ impl HttpServer {
         let route_builder = RouteBuilder::new(method, url.to_string(), content_header).handler(
             move |req, data, _headers| {
                 let handler_clone = Arc::clone(&handler);
-                Box::pin(process_body(req, handler_clone, data, size))
+                let path = req.path.clone();
+                let params = req.params.clone();
+                Box::pin(process_body(req, path, params, handler_clone, data, size))
             },
         );
         let middleware_arc = MiddlewareArc(Arc::new(middleware));
@@ -789,7 +866,10 @@ impl HttpServer {
         middleware: M,
         content_header: Option<ContentHeader>,
     ) where
-        F: Fn(Collected<Bytes>, D, HeaderMap) -> BoxFuture<'static, Res> + Send + Sync + 'static,
+        F: Fn(Collected<Bytes>, String, Params, D, HeaderMap) -> BoxFuture<'static, Res>
+            + Send
+            + Sync
+            + 'static,
         M: Middleware + Send + Sync + 'static,
         D: DataType + Send + Sync + 'static + Clone,
     {
@@ -816,7 +896,11 @@ impl HttpServer {
         M: Middleware + Send + Sync + 'static,
     {
         let simple_handler = Arc::new(simple_handler);
-        let handler = move |collected: Collected<Bytes>, data: Value, headers: HeaderMap| {
+        let handler = move |collected: Collected<Bytes>,
+                            _path: String,
+                            _params: Params,
+                            data: Value,
+                            headers: HeaderMap| {
             let simple_handler_clone = simple_handler.clone();
             let future: BoxFuture<'static, Res> = Box::pin(async move {
                 let result = simple_handler_clone(collected.to_bytes(), data, headers);
@@ -974,6 +1058,7 @@ impl HttpServer {
                     path: req.path,
                     data: req.data,
                     headers: req.headers,
+                    params: req.params,
                 },
                 &next,
             );
@@ -1017,6 +1102,7 @@ impl NextWrapper {
             path: req.path,
             data: req.data,
             headers: req.headers,
+            params: req.params,
         }
     }
 
@@ -1063,9 +1149,10 @@ impl Default for NextWrapper {
 #[derive(Default, Debug)]
 pub struct Req {
     pub req: Request<BoxBody<Bytes, HttpError>>,
-    path: String,
+    pub path: String,
     data: Option<Box<dyn std::any::Any + Send>>,
     pub headers: HeaderMap,
+    pub params: Params,
 }
 
 impl Req {
@@ -1078,6 +1165,7 @@ impl Req {
     pub fn get_path(&self) -> String {
         self.req.uri().path().to_string()
     }
+
     /// Gets data from the request body or middleware data
     /// Data can be different types through the chain
     /// Example: middleware1 receives a string, converts it to a number, and passes it to middleware2
@@ -1105,7 +1193,6 @@ impl Req {
             }
             return Ok(None);
         }
-
         let body_str = String::from_utf8(bytes.to_vec())?;
         if !body_str.trim().is_empty() {
             let json_value: T = serde_json::from_str(&body_str)?;
@@ -1149,11 +1236,39 @@ impl Req {
     pub fn set_data<T: std::any::Any + Send + Debug>(&mut self, data: T) {
         self.data = Some(Box::new(data));
     }
-    pub fn get_params(&self) -> HashMap<String, Vec<String>> {
-        parse_query_params(&self.path)
+    pub fn params(&self) -> &Params {
+        &self.params
+    }
+    pub fn params_mut(&mut self) -> &mut Params {
+        &mut self.params
     }
 }
+#[derive(Debug, Default, Clone)]
+pub struct Params {
+    path_params: HashMap<String, String>,
+    query_params: HashMap<String, Vec<String>>,
+}
 
+impl Params {
+    pub fn new() -> Self {
+        Self {
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+        }
+    }
+
+    pub fn get_path(&self, key: &str) -> Option<&String> {
+        self.path_params.get(key)
+    }
+
+    pub fn get_query(&self, key: &str) -> Option<&Vec<String>> {
+        self.query_params.get(key)
+    }
+
+    pub fn get_query_first(&self, key: &str) -> Option<&String> {
+        self.query_params.get(key).and_then(|v| v.first())
+    }
+}
 #[derive(Debug)]
 pub struct Res {
     pub res: HandlerResult,

@@ -1272,8 +1272,8 @@ impl Params {
 }
 #[derive(Debug)]
 pub struct Res {
-    pub res: HandlerResult,
-    pub headers: HeaderMap,
+    pub(crate) res: HandlerResult,
+    headers: HeaderMap,
 }
 
 impl Default for Res {
@@ -1286,6 +1286,9 @@ impl Default for Res {
 }
 
 impl Res {
+    pub fn new(res: HandlerResult, headers: HeaderMap) -> Self {
+        Self { res, headers }
+    }
     pub fn make_json_response<T: serde::Serialize>(data: T) -> Res {
         let body = serde_json::to_string(&data);
         match body {
